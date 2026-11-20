@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   deleteUserSite: (group) => ipcRenderer.invoke('site:delete', group),
   checkUpdates: () => ipcRenderer.invoke('update:check'),
   checkZapretUpdates: () => ipcRenderer.invoke('zapret:check'),
+  installZapret: () => ipcRenderer.invoke('zapret:install'),
   uninstallApp: () => ipcRenderer.invoke('app:uninstall'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   pickDirectory: () => ipcRenderer.invoke('dialog:dir'),

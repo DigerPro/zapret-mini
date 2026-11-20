@@ -42,6 +42,8 @@ app.setAppUserModelId('com.zapretmini.app');
 
 const APP_DATA = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
 const DATA_DIR = path.join(APP_DATA, 'ZapretMini');
+const LOCAL_APP_DATA = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+const MANAGED_ZAPRET_DIR = path.join(LOCAL_APP_DATA, 'ZapretMini', 'zapret');
 const USER_SITES_FILE = path.join(DATA_DIR, 'user-sites.json');
 const UPDATE_STATE_FILE = path.join(DATA_DIR, 'update-state.json');
 const HOSTS_FILE = path.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts');
@@ -132,6 +134,7 @@ function setupConfig() {
 
   config = new Config(APP_DATA, logger);
   config.load();
+  ensureZapretUserLists(config.get('zapretDir'));
   loadUserSites();
   recoverProbeListBackup();
 }
@@ -455,11 +458,13 @@ async function updateZapret(info, dir) {
       await backend.stop();
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
+    stopWinDivert();
     backup = dir + '.bak-zapret-' + Date.now();
     if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
     fs.renameSync(dir, backup);
     moved = true;
     fs.cpSync(stagingDir, dir, { recursive: true });
+    ensureZapretUserLists(dir);
 
     const bats = await backend.getBats();
     let selected = selectedBefore;
@@ -640,7 +645,7 @@ async function uninstallApp() {
 }
 
 async function autoCheckUpdates() {
-  if (MOCK || SCREENSHOT || !app.isPackaged || updateBusy) return;
+  if (MOCK || SCREENSHOT || !app.isPackaged || updateBusy || operation) return;
   const state = loadUpdateState();
   if (Date.now() - state.lastCheck < 12 * 60 * 60 * 1000) {
     await autoCheckZapret();
@@ -968,6 +973,171 @@ async function startupApply() {
   } catch (err) {
     logger.write('Старт: ' + (err && err.stack ? err.stack : err));
   }
+}
+
+function ensureZapretUserLists(dir) {
+  if (!dir || !looksLikeZapret(dir)) return;
+  try {
+    const created = zapretUpdater.ensureUserLists(dir);
+    if (created.length) logger.write('zapret: созданы пользовательские списки: ' + created.join(', '));
+  } catch (err) {
+    logger.write('zapret: не удалось создать пользовательские списки: ' + (err && err.message ? err.message : err));
+  }
+}
+
+function stopWinDivert() {
+  const sc = path.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'sc.exe');
+  try { spawnSync(sc, ['stop', 'WinDivert'], { windowsHide: true }); } catch { /* ignore */ }
+  try { spawnSync(sc, ['delete', 'WinDivert'], { windowsHide: true }); } catch { /* ignore */ }
+}
+
+function applyUserSitesToFresh(dir) {
+  if (!dir || !looksLikeZapret(dir) || !userSites || !Array.isArray(userSites.sites)) return;
+  const targetsFile = path.join(dir, 'utils', 'targets.txt');
+  const userList = path.join(dir, 'lists', 'list-general-user.txt');
+  if (!fs.existsSync(targetsFile) || !fs.existsSync(userList)) return;
+  const knownUrls = {
+    InstagramWeb: 'https://www.instagram.com',
+    InstagramCDN: 'https://static.cdninstagram.com',
+    EpicWeb: 'https://www.epicgames.com'
+  };
+  for (const site of userSites.sites) {
+    const keys = Array.isArray(site.targets) ? site.targets : [];
+    for (const key of keys) {
+      const url = knownUrls[key] || (site.domain ? 'https://' + String(site.domain).replace(/^www\./i, '') : '');
+      if (!url) continue;
+      try {
+        siteStore.addTargetGroup(targetsFile, site.group, key, url);
+      } catch (err) {
+        logger.write('Сайты: не удалось добавить цель ' + key + ': ' + (err && err.message ? err.message : err));
+      }
+    }
+    if (site.enabled) {
+      try {
+        siteStore.addHostnames(userList, site.hostnames);
+      } catch (err) {
+        logger.write('Сайты: не удалось добавить ' + (site.name || site.group || '') + ': ' + (err && err.message ? err.message : err));
+      }
+    }
+  }
+}
+
+async function installZapret(options) {
+  const opts = options || {};
+  if (MOCK || SCREENSHOT) return { ok: false, error: 'Недоступно в этом режиме' };
+  if (operation || testing || (probe && probe.active)) {
+    return { ok: false, error: 'Дождитесь завершения операции' };
+  }
+  const current = config.get('zapretDir') || '';
+  if (looksLikeZapret(current)) {
+    return { ok: true, already: true, dir: current };
+  }
+  if (opts.confirm) {
+    showWindow();
+    const answer = await dialog.showMessageBox(win, {
+      type: 'question',
+      title: 'Zapret Mini',
+      message: 'Скачать батники zapret?',
+      detail: 'Будет скачана официальная сборка Flowseal/zapret-discord-youtube с GitHub. ' +
+        'Приложение установит её в свою папку. Настройки и добавленные сайты не затрагиваются.',
+      buttons: ['Скачать', 'Отмена'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    });
+    if (answer.response !== 0) return { ok: false, canceled: true };
+  }
+
+  setOperation('zapret-install', 'Скачиваю батники zapret…');
+  await pushState();
+  if (win) win.setProgressBar(0);
+  const tempBase = path.join(DATA_DIR, 'update', 'zapret-fresh-' + Date.now());
+  let installed = null;
+  let applied = null;
+  try {
+    try { await backend.stop(); } catch { /* ignore */ }
+    stopWinDivert();
+    const prepared = await zapretUpdater.downloadAndPrepareLatest(tempBase, (received, total) => {
+      if (!win || !total) return;
+      try { win.setProgressBar(Math.max(0, Math.min(1, received / total))); } catch { /* ignore */ }
+    });
+    if (win) win.setProgressBar(-1);
+    installed = zapretUpdater.installFromDirectory(prepared.root, MANAGED_ZAPRET_DIR);
+    ensureZapretUserLists(MANAGED_ZAPRET_DIR);
+    config.set('zapretDir', MANAGED_ZAPRET_DIR);
+    config.set('selectedBat', detectSelectedBat(MANAGED_ZAPRET_DIR) || installed.bats[0] || '');
+    config.save();
+    applyUserSitesToFresh(MANAGED_ZAPRET_DIR);
+    setOperation(null, '');
+    await pushState();
+
+    const bat = selectedBat();
+    if (bat) {
+      try {
+        applied = await doApply(bat);
+      } catch (err) {
+        applied = { ok: false, error: (err && err.message) || 'неизвестная ошибка' };
+      }
+    }
+    const version = installed.version || prepared.info.latest || '';
+    const lines = [
+      'Версия: ' + (version || 'неизвестна'),
+      'Папка: ' + MANAGED_ZAPRET_DIR
+    ];
+    if (applied && applied.ok) lines.push('Стратегия: ' + bat.replace(/\.bat$/i, ''));
+    if (applied && applied.ok === false) lines.push('', 'Обход не запустился: ' + (applied.error || 'неизвестная ошибка'));
+    showWindow();
+    await dialog.showMessageBox(win, {
+      type: applied && applied.ok === false ? 'warning' : 'info',
+      title: 'Zapret Mini',
+      message: applied && applied.ok === false ? 'Батники установлены, но обход не запустился' : 'Батники zapret установлены',
+      detail: lines.join('\n'),
+      buttons: ['OK']
+    });
+    return { ok: true, version, dir: MANAGED_ZAPRET_DIR, applied: applied ? Boolean(applied.ok) : null };
+  } catch (err) {
+    setOperation(null, '');
+    await pushState();
+    if (win) win.setProgressBar(-1);
+    logger.write('Установка zapret: ' + (err && err.stack ? err.stack : err));
+    showWindow();
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'Zapret Mini',
+      message: 'Не удалось скачать батники',
+      detail: (err && err.message) || 'Неизвестная ошибка',
+      buttons: ['OK']
+    });
+    return { ok: false, error: (err && err.message) || 'Неизвестная ошибка' };
+  } finally {
+    try { fs.rmSync(tempBase, { recursive: true, force: true }); } catch { /* ignore */ }
+    if (win) {
+      try { win.setProgressBar(-1); } catch { /* ignore */ }
+    }
+  }
+}
+
+async function offerZapretInstallOnStartup() {
+  if (MOCK || SCREENSHOT) return false;
+  if (!config || !config.get) return false;
+  const dir = config.get('zapretDir') || '';
+  if (looksLikeZapret(dir)) return false;
+  showWindow();
+  const answer = await dialog.showMessageBox(win, {
+    type: 'question',
+    title: 'Zapret Mini',
+    message: 'Батники zapret не найдены',
+    detail: 'Скачать официальную сборку Flowseal/zapret-discord-youtube?\n\n' +
+      'Приложение скачает последнюю версию с GitHub и установит её в свою папку. ' +
+      'Настройки и добавленные сайты не затрагиваются.',
+    buttons: ['Скачать', 'Позже'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true
+  });
+  if (answer.response !== 0) return false;
+  const res = await installZapret();
+  return Boolean(res && res.ok);
 }
 
 async function doToggle() {
@@ -1551,6 +1721,8 @@ async function saveSettings(patch) {
     }
     dirChanged = true;
     config.set('zapretDir', dir);
+    ensureZapretUserLists(dir);
+    applyUserSitesToFresh(dir);
     const bats = await backend.getBats();
     if (!bats.some((b) => b.toLowerCase() === selectedBat().toLowerCase())) {
       config.set('selectedBat', MOCK ? (bats[0] || '') : (detectSelectedBat(dir) || (bats[0] || '')));
@@ -1892,6 +2064,7 @@ function setupIpc() {
   ipcMain.handle('site:delete', (event, group) => safeAction(() => deleteUserSite(group)));
   ipcMain.handle('update:check', () => safeAction(() => checkForUpdates(true)));
   ipcMain.handle('zapret:check', () => safeAction(() => checkZapretUpdates(true)));
+  ipcMain.handle('zapret:install', () => safeAction(() => installZapret({ confirm: true })));
   ipcMain.handle('app:uninstall', () => safeAction(() => uninstallApp()));
 
   ipcMain.handle('settings:save', (event, patch) => safeAction(() => saveSettings(patch)));
@@ -2219,8 +2392,16 @@ function start() {
     startRefreshLoop();
     setTimeout(() => { pushState(); }, 600);
     if (!MOCK && !SCREENSHOT) {
-      setTimeout(() => { startupApply(); }, 900);
-      setTimeout(() => { autoCheckUpdates(); }, 9000);
+      setTimeout(async () => {
+        try {
+          const installed = await offerZapretInstallOnStartup();
+          if (!installed) await startupApply();
+        } catch (err) {
+          logger.write('Старт: ' + (err && err.stack ? err.stack : err));
+          await startupApply();
+        }
+        setTimeout(() => { autoCheckUpdates(); }, 3000);
+      }, 900);
     }
 
     if (SCREENSHOT) {

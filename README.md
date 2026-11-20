@@ -15,6 +15,8 @@
   стратегии, сохраняет рабочий вариант и показывает сайт отдельной карточкой.
 - Встроенные сервисы защищены от отключения; добавленные сайты можно выключать
   свитчем и удалять.
+- Если сборка zapret не найдена, приложение предлагает скачать официальную
+  сборку Flowseal с GitHub и устанавливает её само.
 - Автопроверка обновлений приложения через GitHub Releases.
 - Автопроверка обновлений сборки zapret из
   [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube):
@@ -24,15 +26,18 @@
 
 ## Установка
 
-1. Скачай свежий релиз zapret:
-   [Flowseal/zapret-discord-youtube/releases](https://github.com/Flowseal/zapret-discord-youtube/releases).
-   Распакуй, например, в `C:\zapret`.
-2. Скачай `ZapretMini-<версия>-win-x64.zip` из
+1. Скачай `ZapretMini-<версия>-win-x64.zip` из
    [Releases](https://github.com/DigerPro/zapret-mini/releases).
-3. Распакуй приложение, например, в
+2. Распакуй приложение, например, в
    `%LOCALAPPDATA%\Programs\ZapretMini` и запусти `ZapretMini.exe`.
-4. Подтверди UAC. Приложение само найдёт папку zapret на рабочем столе,
-   в загрузках или в `C:\zapret`. Если не нашло — укажи папку в настройках.
+3. Подтверди UAC. Если сборки zapret нет, приложение предложит скачать
+   официальную сборку
+   [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
+   Нажми «Скачать»: приложение само скачает последнюю версию с GitHub,
+   установит её в `%LOCALAPPDATA%\ZapretMini\zapret` и применит стратегию.
+4. Если сборка уже есть на диске, приложение найдёт её на рабочем столе,
+   в загрузках или в `C:\zapret`. Если не нашло — укажи папку в настройках
+   или нажми «Скачать» в разделе «Сборка zapret».
 5. При первом запуске создаётся задача автозапуска без UAC.
 
 Приложение не подписано сертификатом. SmartScreen может предупредить:

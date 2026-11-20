@@ -52,6 +52,8 @@
     setHint: $('#set-hint'),
     setHintDot: $('#set-hint-dot'),
     setMsg: $('#set-msg'),
+    setDownloadRow: $('#set-download-row'),
+    setDownload: $('#set-download'),
     setAutostart: $('#set-autostart'),
     setTray: $('#set-tray'),
     setTargets: $('#set-targets'),
@@ -299,7 +301,8 @@
     if (!st) return;
     const probe = st.probe && st.probe.active ? st.probe : null;
     const testing = probe ? null : st.testing;
-    const busyOp = st.operation === 'check' || st.operation === 'apply' || st.operation === 'restore';
+    const busyOp = st.operation === 'check' || st.operation === 'apply' || st.operation === 'restore' ||
+      st.operation === 'zapret-install' || st.operation === 'sites';
     const currentBat = probe ? probe.domain : (testing ? testing.bat : st.selectedBat);
     const currentResult = probe ? null : (testing ? displayResult() : getResult(currentBat));
     const parts = splitName(currentBat || '—');
@@ -398,8 +401,12 @@
   function renderMainSub() {
     const st = state.data;
     if (!st) return;
+    if (st.operation === 'zapret-install') {
+      els.mainSub.textContent = st.busyText || 'Скачиваю батники zapret…';
+      return;
+    }
     if (!st.zapretFound) {
-      els.mainSub.textContent = 'папка zapret не найдена';
+      els.mainSub.textContent = 'Батники zapret не найдены — открой настройки';
       return;
     }
     const testing = st.testing;
@@ -782,6 +789,7 @@
       ? 'bin\\winws.exe найден · ' + st.bats.length + ' батников'
       : 'bin\\winws.exe не найден';
     els.setHintDot.className = 'hdot' + (st.zapretFound ? '' : ' bad');
+    if (els.setDownloadRow) els.setDownloadRow.hidden = st.zapretFound;
     els.setAutostart.setAttribute('aria-checked', st.config.autostart ? 'true' : 'false');
     els.setTray.setAttribute('aria-checked', st.config.minimizeToTray ? 'true' : 'false');
     els.setService.textContent = st.serviceLabel;
@@ -809,6 +817,7 @@
     els.btnProbe.disabled = busy || !st.zapretFound;
     els.btnSettings.disabled = busy;
     if (els.setUninstall) els.setUninstall.disabled = busy;
+    if (els.setDownload) els.setDownload.disabled = busy;
 
     els.btnPower.className = 'btn ' + (st.testing ? 'btn-danger' : (st.winwsRunning ? 'btn-danger' : 'btn-primary'));
     if (st.testing) {
@@ -1570,6 +1579,17 @@
         if (!res || !res.canceled) showNotice((res && res.error) || 'Не удалось запустить удаление');
       }
     });
+    if (els.setDownload) {
+      els.setDownload.addEventListener('click', async () => {
+        els.setDownload.disabled = true;
+        closeSettings(false);
+        const res = await api.installZapret().catch(() => null);
+        els.setDownload.disabled = false;
+        if (!res || !res.ok) {
+          if (!res || !res.canceled) showNotice((res && res.error) || 'Не удалось скачать батники');
+        }
+      });
+    }
 
     els.btnApply.addEventListener('click', async () => {
       if (!state.viewed) return;

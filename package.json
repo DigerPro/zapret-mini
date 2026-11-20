@@ -1,7 +1,7 @@
 {
   "name": "zapret-mini-electron",
   "productName": "ZapretMini",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Zapret Mini — панель управления обходом (Electron)",
   "main": "main.js",
   "author": "Zapret Mini",
