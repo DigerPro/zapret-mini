@@ -1,7 +1,19 @@
 # Zapret Mini
 
+**Zapret Mini — бесплатная открытая оболочка (GUI) для zapret.**
+
+> **Единственный автор zapret, с которым работает этот проект, — Flowseal:**
+> [github.com/Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)  
+> Zapret Mini не является автором zapret и не является официальным клиентом
+> Flowseal. Это только графическая оболочка: окно, переключение стратегий,
+> проверка сайтов и установка сборки.
+
 Панель управления обходом блокировок для Windows на базе
 [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
+
+Проект **полностью бесплатный**: нет платных версий, подписок и платного доступа.
+Исходный код **открыт**: [DigerPro/zapret-mini](https://github.com/DigerPro/zapret-mini),
+лицензия MIT.
 
 ![Главное окно](docs/preview.png)
 
@@ -77,11 +89,17 @@ npm run pack
 
 Готовое приложение: `release\win-unpacked`.
 
-## Лицензия
+## Авторство и лицензия
 
-Код этого приложения — MIT, см. [LICENSE](LICENSE).
-
-Сборка zapret, `winws.exe`, WinDivert и батники принадлежат их авторам:
-[Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
-и [bol-van/zapret](https://github.com/bol-van/zapret). Они не входят в этот
-репозиторий и распространяются по своим лицензиям.
+- **Zapret** — сторонний проект. Единственный автор сборки, с которой работает
+  Zapret Mini, — **Flowseal**:
+  [github.com/Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
+- **Zapret Mini** — только оболочка. Автор оболочки не является автором zapret
+  и не претендует на него.
+- Проект **полностью бесплатный**: нет платных версий, подписок и платного
+  доступа.
+- Исходный код Zapret Mini **открыт** и распространяется по лицензии MIT:
+  [github.com/DigerPro/zapret-mini](https://github.com/DigerPro/zapret-mini),
+  [LICENSE](LICENSE).
+- `winws.exe`, WinDivert и батники — сторонние компоненты. Они не входят в этот
+  репозиторий и распространяются по своим лицензиям.
