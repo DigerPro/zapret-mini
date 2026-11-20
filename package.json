@@ -1,7 +1,7 @@
 {
   "name": "zapret-mini-electron",
   "productName": "ZapretMini",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "Zapret Mini — панель управления обходом (Electron)",
   "main": "main.js",
   "author": "Zapret Mini",
@@ -19,7 +19,7 @@
     "start": "electron .",
     "mock": "electron . --mock",
     "shots": "electron . --mock --screenshot=all",
-    "test": "node --test test/probe.test.js test/site-store.test.js test/updater.test.js test/zapret-updater.test.js",
+    "test": "node --test test/probe.test.js test/site-store.test.js test/updater.test.js test/zapret-updater.test.js test/github-release.test.js",
     "pack": "electron-builder --dir"
   },
   "devDependencies": {

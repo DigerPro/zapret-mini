@@ -1101,13 +1101,19 @@ async function installZapret(options) {
     if (win) win.setProgressBar(-1);
     logger.write('Установка zapret: ' + (err && err.stack ? err.stack : err));
     showWindow();
-    await dialog.showMessageBox(win, {
+    const action = await dialog.showMessageBox(win, {
       type: 'error',
       title: 'Zapret Mini',
       message: 'Не удалось скачать батники',
       detail: (err && err.message) || 'Неизвестная ошибка',
-      buttons: ['OK']
+      buttons: ['Открыть GitHub', 'OK'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
     });
+    if (action.response === 0) {
+      try { shell.openExternal('https://github.com/Flowseal/zapret-discord-youtube/releases'); } catch { /* ignore */ }
+    }
     return { ok: false, error: (err && err.message) || 'Неизвестная ошибка' };
   } finally {
     try { fs.rmSync(tempBase, { recursive: true, force: true }); } catch { /* ignore */ }
