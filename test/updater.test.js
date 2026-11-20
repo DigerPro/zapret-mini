@@ -45,3 +45,11 @@ test('sha256File считает хеш файла', async () => {
   assert.equal(hash, '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
   fs.rmSync(file, { force: true });
 });
+
+test('helperScript ждёт процессы и повторяет замену папки', () => {
+  const script = updater.helperScript();
+  assert.match(script, /Get-Process -Name ZapretMini/);
+  assert.match(script, /rename attempt/);
+  assert.match(script, /Restart-App/);
+  assert.match(script, /apply-update\.log/);
+});
