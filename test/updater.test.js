@@ -53,4 +53,6 @@ test('helperScript ждёт процессы и повторяет замену 
   assert.match(script, /Restart-App/);
   assert.match(script, /apply-update\.log/);
   assert.match(script, /taskkill\.exe.*winws\.exe/);
+  assert.match(script, /update-args\.json/);
+  assert.match(script, /ZapretMiniUpdate/);
 });

@@ -1031,6 +1031,15 @@ function startWatchdog() {
   }
 }
 
+function cleanupUpdateTask() {
+  if (MOCK || SCREENSHOT || !app.isPackaged) return;
+  const sys = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const schtasks = path.join(sys, 'System32', 'schtasks.exe');
+  try {
+    spawnSync(schtasks, ['/Delete', '/TN', 'ZapretMiniUpdate', '/F'], { windowsHide: true });
+  } catch { /* ignore */ }
+}
+
 function applyUserSitesToFresh(dir) {
   if (!dir || !looksLikeZapret(dir) || !userSites || !Array.isArray(userSites.sites)) return;
   const targetsFile = path.join(dir, 'utils', 'targets.txt');
@@ -2444,6 +2453,7 @@ function start() {
       syncAutostart();
       maybeServiceNotice();
       ensureUninstallEntry();
+      cleanupUpdateTask();
       startWatchdog();
     }
     startRefreshLoop();
