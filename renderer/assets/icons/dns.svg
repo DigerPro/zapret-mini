@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="#A6B1C0" stroke-width="1.25"><!-- DNS: глобус, интерфейсная иконка (не бренд) -->
+<circle cx="10" cy="10" r="7.2"/>
+<ellipse cx="10" cy="10" rx="3.2" ry="7.2"/>
+<path d="M3 10h14" stroke-linecap="round"/>
+</svg>

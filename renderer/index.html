@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="dark">
+<title>Zapret Mini</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app" data-mode="idle">
+
+  <!-- ======================= TITLE BAR ======================= -->
+  <header class="titlebar" id="titlebar">
+    <div class="brand">
+      <svg class="brand-mark" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <rect x="2" y="4" width="9" height="2" rx="1" fill="#4ADE80"/>
+        <rect x="6" y="8" width="10" height="2" rx="1" fill="#4ADE80" opacity=".55"/>
+        <rect x="2" y="12" width="7" height="2" rx="1" fill="#4ADE80" opacity=".32"/>
+      </svg>
+      <span>Zapret Mini</span>
+    </div>
+    <div class="titlebar-tools">
+      <button class="icon-btn" id="btn-settings" aria-label="Настройки" aria-expanded="false" title="Настройки">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.1"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button class="win-btn" id="win-min" aria-label="Свернуть" title="Свернуть">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M0 5h10"/></svg>
+      </button>
+      <button class="win-btn" id="win-max" aria-label="Развернуть" title="Развернуть">
+        <svg class="ico-max" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><rect x=".5" y=".5" width="9" height="9"/></svg>
+        <svg class="ico-restore" hidden width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M2.5 2.5V.5h7v7h-2"/><rect x=".5" y="2.5" width="7" height="7"/></svg>
+      </button>
+      <button class="win-btn win-close" id="win-close" aria-label="Закрыть" title="Закрыть в трей">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M.5.5l9 9M9.5.5l-9 9"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ======================= СТАТУС ======================= -->
+  <section class="status" aria-label="Состояние обхода">
+    <div class="status-main">
+      <span class="status-dot" id="st-dot" aria-hidden="true"></span>
+      <div class="status-text">
+        <span class="status-label" id="st-label" aria-live="polite">Загрузка</span>
+        <h1 class="status-name"><span id="st-name">—</span> <span class="arg" id="st-arg"></span></h1>
+      </div>
+    </div>
+
+    <div class="status-meta">
+      <div class="st-idle">
+        <div class="st-row">
+          <div class="segments" id="segments" aria-hidden="true"></div>
+          <span class="status-count" id="st-count" aria-live="polite">—/13</span>
+        </div>
+        <span class="status-time" id="st-time">ещё не проверялось</span>
+      </div>
+      <div class="st-test">
+        <div class="st-row">
+          <div class="segments segments--test" id="test-segments" aria-hidden="true"></div>
+          <span class="status-count" id="st-progress">0 / 0</span>
+        </div>
+        <span class="status-time" id="st-remain">осталось ≈ 6 мин</span>
+      </div>
+      <span class="sr-only" id="st-count-sr" aria-live="polite"></span>
+    </div>
+
+    <div class="status-actions">
+      <button class="btn btn-ghost" id="btn-check">Проверить</button>
+      <button class="btn btn-danger" id="btn-power">Отключить</button>
+    </div>
+  </section>
+
+  <!-- ======================= ТЕЛО ======================= -->
+  <div class="body">
+
+    <!-- ---------- стратегии ---------- -->
+    <aside class="rail" aria-label="Стратегии">
+      <div class="rail-head">
+        <span class="rail-title">Стратегии</span>
+        <span class="rail-count" id="rail-count">0</span>
+      </div>
+
+      <div class="search-wrap">
+        <svg class="search-ic" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+          <circle cx="6" cy="6" r="4.3"/><path d="M9.4 9.4l3.1 3.1" stroke-linecap="round"/>
+        </svg>
+        <input class="search" id="search" type="search" placeholder="Поиск батника…" aria-label="Поиск батника" autocomplete="off" spellcheck="false">
+        <span class="search-key" aria-hidden="true">/</span>
+      </div>
+
+      <div class="strategies" id="strategy-list" role="radiogroup" aria-label="Список батников">
+        <div class="empty" id="empty" hidden>Ничего не найдено</div>
+      </div>
+
+      <div class="rail-foot">
+        <button class="btn btn-primary" id="btn-apply">Применить</button>
+        <div class="split" role="group" aria-label="Проверка стратегий">
+          <button class="btn btn-ghost" id="btn-testall">Тест всех</button>
+          <button class="btn btn-ghost btn-icon" id="btn-summary" title="Итог последних проверок" aria-label="Итог последних проверок">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M2 3.2h1.6M2 7h1.6M2 10.8h1.6M6.2 3.2h5.8M6.2 7h5.8M6.2 10.8h3.6" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ---------- сайты ---------- -->
+    <main class="main">
+      <div class="main-head">
+        <div>
+          <h2 class="main-title">Сайты</h2>
+          <p class="main-sub" id="main-sub">ещё не проверялось</p>
+        </div>
+        <div class="sites-tools">
+          <button class="btn btn-ghost btn-probe" id="btn-probe" title="Проверить любой сайт">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+              <circle cx="8" cy="8" r="6"/>
+              <path d="M2 8h12M8 2c1.8 1.7 2.7 3.7 2.7 6S9.8 12.3 8 14M8 2C6.2 3.7 5.3 5.7 5.3 8s.9 4.3 2.7 6"/>
+            </svg>
+            <span>Любой сайт…</span>
+          </button>
+          <div class="group group-icons" role="group" aria-label="Категории сайтов">
+            <button id="expand-all" title="Развернуть все" aria-label="Развернуть все">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3.2 4.4L7 8.2l3.8-3.8M3.2 8.4L7 12.2l3.8-3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="collapse-all" title="Свернуть все" aria-label="Свернуть все">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3.2 9.6L7 5.8l3.8 3.8M3.2 5.6L7 1.8l3.8 3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sites" id="sites"></div>
+    </main>
+  </div>
+
+  <!-- ======================= НИЖНЯЯ ПОЛОСА ======================= -->
+  <footer class="bottombar">
+    <div class="bb-idle" id="bb-idle-left">
+      <span class="bb-text">Ещё не проверялось</span>
+    </div>
+
+    <div class="bb-idle bb-right" id="bb-idle-right">
+      <span class="bb-text bb-proc"><span class="pdot" id="bb-pdot"></span><span id="bb-winws">winws.exe · не запущен</span></span>
+      <span class="bb-sep">·</span>
+      <span class="bb-text" id="bb-service">служба zapret — <b>не найдена</b></span>
+    </div>
+
+    <div class="bb-test">
+      <span class="bb-text"><span id="bb-mode">Тест всех</span> · <b id="bb-current">—</b></span>
+      <span class="track" aria-hidden="true"><i id="bb-track"></i></span>
+      <span class="bb-text"><b id="bb-count">0/0</b></span>
+      <span class="bb-text" id="bb-remain">≈ 0 мин</span>
+      <span class="bb-cancel-wrap"><button class="btn btn-danger" id="bb-cancel">Отмена</button></span>
+    </div>
+  </footer>
+
+  <!-- ======================= УВЕДОМЛЕНИЕ ======================= -->
+  <div class="notice" id="notice" hidden role="alert">
+    <span id="notice-text"></span>
+    <button class="notice-close" id="notice-close" aria-label="Закрыть сообщение">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9"/></svg>
+    </button>
+  </div>
+
+  <!-- ======================= НАСТРОЙКИ ======================= -->
+  <div class="settings-layer" id="settings-layer" hidden>
+    <div class="scrim" id="scrim"></div>
+    <aside class="settings" id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="set-title">
+      <header class="set-head">
+        <span class="set-title" id="set-title">Настройки</span>
+        <button class="icon-btn" id="set-close" aria-label="Закрыть настройки">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11"/></svg>
+        </button>
+      </header>
+
+      <div class="set-body">
+        <section class="set-sec">
+          <div class="set-label">Сборка zapret</div>
+          <div class="field">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#8391A3" stroke-width="1.2" aria-hidden="true">
+              <path d="M1.5 4.2c0-.6.5-1.1 1.1-1.1h3l1.3 1.6h6.5c.6 0 1.1.5 1.1 1.1v6.4c0 .6-.5 1.1-1.1 1.1H2.6c-.6 0-1.1-.5-1.1-1.1V4.2z"/>
+            </svg>
+            <span class="field-path" id="set-path" title="">—</span>
+            <button class="btn btn-ghost" id="set-pick">Изменить</button>
+          </div>
+          <div class="hint"><span class="hdot" id="set-hint-dot"></span><span id="set-hint">Проверяю папку…</span></div>
+          <p class="set-msg" id="set-msg" hidden></p>
+        </section>
+
+        <section class="set-sec">
+          <div class="set-label">Запуск</div>
+          <div class="set-row">
+            <div>
+              <div class="set-row-t">Запускать с Windows</div>
+              <div class="set-row-h">задача планировщика ZapretMini · без UAC</div>
+            </div>
+            <button class="switch" id="set-autostart" role="switch" aria-checked="false" aria-label="Запускать с Windows"><span class="knob"></span></button>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="set-row-t">Сворачивать в трей</div>
+              <div class="set-row-h">закрытие окна не выключает обход</div>
+            </div>
+            <button class="switch" id="set-tray" role="switch" aria-checked="true" aria-label="Сворачивать в трей"><span class="knob"></span></button>
+          </div>
+        </section>
+
+        <section class="set-sec">
+          <div class="set-label">Файлы</div>
+          <button class="link-row" id="set-targets">
+            <svg class="lic" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+              <path d="M9.5 1.5H4c-.6 0-1 .4-1 1v11c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V5l-3.5-3.5z"/>
+              <path d="M9.5 1.5V5H13M5.5 8h5M5.5 10.5h5"/>
+            </svg>
+            <span class="lt"><b>targets.txt</b><span id="set-targets-sub">—</span></span>
+            <svg class="arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M5.2 3.2L9 7l-3.8 3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="link-row" id="set-log">
+            <svg class="lic" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+              <path d="M2 4.5h12M2 8h12M2 11.5h8"/>
+            </svg>
+            <span class="lt"><b>Журнал</b><span id="set-log-sub">—</span></span>
+            <svg class="arrow" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M5.2 3.2L9 7l-3.8 3.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </section>
+
+        <section class="set-sec">
+          <div class="set-label">Обновления</div>
+          <div class="set-row">
+            <div>
+              <div class="set-row-t">Приложение</div>
+              <div class="set-row-h" id="set-update-status">—</div>
+            </div>
+            <button class="btn btn-ghost" id="set-update">Проверить</button>
+          </div>
+          <div class="set-row">
+            <div>
+              <div class="set-row-t">Сборка zapret</div>
+              <div class="set-row-h" id="set-zapret-status">—</div>
+            </div>
+            <button class="btn btn-ghost" id="set-zapret-update">Проверить</button>
+          </div>
+        </section>
+
+        <section class="set-sec">
+          <div class="set-label">Служба</div>
+          <div class="spec">
+            <div class="spec-row"><span>Служба zapret</span><b id="set-service">—</b></div>
+            <div class="spec-row"><span>HTTP-таймаут</span><b>6 с · 8 потоков</b></div>
+          </div>
+        </section>
+
+        <section class="set-sec">
+          <div class="set-label">Удаление</div>
+          <div class="set-row">
+            <div>
+              <div class="set-row-t">Zapret Mini</div>
+              <div class="set-row-h">приложение, настройки, сайты и управляемый zapret</div>
+            </div>
+            <button class="btn btn-danger" id="set-uninstall">Удалить</button>
+          </div>
+        </section>
+
+        <p class="set-note">Панель не меняет батники и targets.txt: только запускает их и проверяет цели.</p>
+      </div>
+
+      <footer class="set-foot">
+        <span class="ver" id="set-version">Zapret Mini</span>
+        <button class="btn btn-ghost" id="set-folder">Открыть папку</button>
+      </footer>
+    </aside>
+  </div>
+
+  <!-- ======================= ИТОГ ТЕСТА ======================= -->
+  <div class="summary-layer" id="summary-layer" hidden>
+    <div class="scrim" id="summary-scrim"></div>
+    <section class="summary" id="summary-panel" role="dialog" aria-modal="true" aria-labelledby="sum-title" aria-describedby="sum-sub" tabindex="-1">
+      <header class="sum-head">
+        <div class="sum-heading">
+          <h2 class="sum-title" id="sum-title">Тест завершён</h2>
+          <p class="sum-sub" id="sum-sub">—</p>
+        </div>
+        <button class="icon-btn" id="sum-close" aria-label="Закрыть итог теста">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11"/></svg>
+        </button>
+      </header>
+
+      <div class="sum-list" id="sum-list"></div>
+
+      <footer class="sum-foot">
+        <span class="sum-note" id="sum-note">лучший по HTTP · ping · отклику</span>
+        <button class="btn btn-ghost" id="sum-dismiss">Закрыть</button>
+        <button class="btn btn-primary" id="sum-apply" disabled>Применить лучший</button>
+      </footer>
+    </section>
+  </div>
+
+  <!-- ======================= ПОИСК ОБХОДА ======================= -->
+  <div class="probe-layer" id="probe-layer" hidden>
+    <div class="scrim" id="probe-scrim"></div>
+    <section class="summary probe" id="probe-panel" role="dialog" aria-modal="true" aria-labelledby="probe-title" aria-describedby="probe-sub" tabindex="-1">
+      <header class="sum-head">
+        <div class="sum-heading">
+          <h2 class="sum-title" id="probe-title">Найти обход</h2>
+          <p class="sum-sub" id="probe-sub">Проверю, какая стратегия открывает сайт</p>
+        </div>
+        <button class="icon-btn" id="probe-close" aria-label="Закрыть поиск">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11"/></svg>
+        </button>
+      </header>
+
+      <div class="probe-body">
+        <div class="probe-form" id="probe-form">
+          <label class="probe-label" for="probe-input">Домен или ссылка</label>
+          <input class="probe-input" id="probe-input" type="text" maxlength="2048" placeholder="example.com или https://example.com/page" aria-label="Домен или ссылка" autocomplete="off" spellcheck="false">
+          <div class="probe-dns" id="probe-dns">DNS проверится перед запуском</div>
+
+          <div class="probe-modes" role="radiogroup" aria-label="Режим поиска">
+            <button class="probe-mode" id="probe-mode-quick" role="radio" aria-checked="true">
+              <b>Быстро</b>
+              <span id="probe-quick-sub">6 стратегий · ~1 мин</span>
+            </button>
+            <button class="probe-mode" id="probe-mode-all" role="radio" aria-checked="false">
+              <b>Все стратегии</b>
+              <span id="probe-all-sub">22 · ~3–4 мин</span>
+            </button>
+          </div>
+
+          <p class="probe-hint">Во время поиска сеть будет коротко переключаться между стратегиями.</p>
+          <p class="probe-error" id="probe-error" hidden></p>
+        </div>
+
+        <div class="probe-run" id="probe-run" hidden>
+          <div class="probe-progress" aria-hidden="true"><i id="probe-bar"></i></div>
+          <div class="probe-runline">
+            <span id="probe-run-text" aria-live="polite">Проверяю…</span>
+            <span id="probe-remain">—</span>
+          </div>
+          <div class="probe-list" id="probe-list"></div>
+          <p class="probe-alert" id="probe-alert" hidden></p>
+          <div class="probe-more" id="probe-more" hidden>
+            <span>Быстрый список не помог. Можно проверить оставшиеся стратегии.</span>
+            <button class="btn btn-ghost" id="probe-full">Проверить все</button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="sum-foot probe-foot">
+        <span class="sum-note" id="probe-note">результаты не меняют общую статистику</span>
+        <button class="btn btn-ghost" id="probe-reset" hidden>Другой сайт</button>
+        <button class="btn btn-ghost" id="probe-cancel" hidden>Отмена</button>
+        <button class="btn btn-primary" id="probe-start">Найти</button>
+        <button class="btn btn-primary" id="probe-apply" hidden disabled>Применить лучший</button>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "name": "zapret-mini-electron",
+  "productName": "ZapretMini",
+  "version": "0.9.7",
+  "description": "Zapret Mini — панель управления обходом (Electron)",
+  "main": "main.js",
+  "author": "Zapret Mini",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DigerPro/zapret-mini.git"
+  },
+  "homepage": "https://github.com/DigerPro/zapret-mini",
+  "bugs": {
+    "url": "https://github.com/DigerPro/zapret-mini/issues"
+  },
+  "scripts": {
+    "start": "electron .",
+    "mock": "electron . --mock",
+    "shots": "electron . --mock --screenshot=all",
+    "test": "node --test test/probe.test.js test/site-store.test.js test/updater.test.js test/zapret-updater.test.js",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "com.zapretmini.app",
+    "productName": "ZapretMini",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "assets/app.ico",
+      "assets/tray.ico",
+      "assets/icon.png",
+      "assets/hide-zapret.ps1"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/app.ico",
+      "requestedExecutionLevel": "requireAdministrator"
+    }
+  }
+}
