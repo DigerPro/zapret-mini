@@ -2067,7 +2067,7 @@ function updateTrayMenu(state) {
       }
     },
     { type: 'separator' },
-    { label: 'Выход', click: quitApp }
+    { label: 'Закрыть приложение', click: quitApp }
   ]);
   tray.setContextMenu(menu);
   tray.setToolTip('Zapret Mini — ' + (selected || '—') + (running ? ' · обход включён' : ' · обход выключен'));
