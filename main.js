@@ -322,6 +322,7 @@ async function downloadAndInstall(info) {
     await updater.installUpdate(file.zipPath, path.dirname(process.execPath), process.execPath, process.pid);
     logger.write('Обновление: установка ' + info.latest + ', выход');
     isQuitting = true;
+    stopBypassSync();
     setTimeout(() => app.quit(), 500);
   } catch (err) {
     try { win.setProgressBar(-1); } catch { /* ignore */ }
@@ -992,6 +993,42 @@ function stopWinDivert() {
   const sc = path.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'sc.exe');
   try { spawnSync(sc, ['stop', 'WinDivert'], { windowsHide: true }); } catch { /* ignore */ }
   try { spawnSync(sc, ['delete', 'WinDivert'], { windowsHide: true }); } catch { /* ignore */ }
+}
+
+function stopBypassSync() {
+  const sys = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  try {
+    spawnSync(path.join(sys, 'System32', 'taskkill.exe'), ['/IM', 'winws.exe', '/F'], { windowsHide: true });
+  } catch { /* ignore */ }
+  stopWinDivert();
+}
+
+function startWatchdog() {
+  if (MOCK || SCREENSHOT || !app.isPackaged) return;
+  const sys = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const ps = path.join(sys, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const script = [
+    '$pidToWatch = ' + process.pid,
+    'while (Get-Process -Id $pidToWatch -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 2 }',
+    'Start-Sleep -Seconds 3',
+    'if (Get-Process -Name ZapretMini -ErrorAction SilentlyContinue) { exit }',
+    'Start-Sleep -Seconds 2',
+    'if (Get-Process -Name ZapretMini -ErrorAction SilentlyContinue) { exit }',
+    'Stop-Process -Name winws -Force -ErrorAction SilentlyContinue',
+    '& "$env:SystemRoot\\System32\\sc.exe" stop WinDivert 2>$null | Out-Null',
+    '& "$env:SystemRoot\\System32\\sc.exe" delete WinDivert 2>$null | Out-Null'
+  ].join('\r\n');
+  try {
+    const child = spawn(ps, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    child.unref();
+    if (logger) logger.write('Сторож winws запущен для PID ' + process.pid);
+  } catch (err) {
+    if (logger) logger.write('Сторож winws: ' + (err && err.message ? err.message : err));
+  }
 }
 
 function applyUserSitesToFresh(dir) {
@@ -1979,6 +2016,7 @@ function quitApp() {
     try { tray.destroy(); } catch { /* ignore */ }
     tray = null;
   }
+  stopBypassSync();
   app.quit();
 }
 
@@ -1986,6 +2024,15 @@ function createTray() {
   let icon = nativeImage.createFromPath(path.join(ASSETS_DIR, 'tray.ico'));
   if (icon.isEmpty()) icon = nativeImage.createFromPath(path.join(ASSETS_DIR, 'icon.png'));
   tray = new Tray(icon);
+  if (START_HIDDEN) {
+    try {
+      tray.displayBalloon({
+        title: 'Zapret Mini',
+        content: 'Работает в трее. Обход включён.',
+        iconType: 'info'
+      });
+    } catch { /* ignore */ }
+  }
   tray.setToolTip('Zapret Mini');
   tray.on('click', showWindow);
   tray.on('double-click', showWindow);
@@ -2397,6 +2444,7 @@ function start() {
       syncAutostart();
       maybeServiceNotice();
       ensureUninstallEntry();
+      startWatchdog();
     }
     startRefreshLoop();
     setTimeout(() => { pushState(); }, 600);
@@ -2445,6 +2493,7 @@ if (MOCK) {
 app.on('before-quit', () => {
   isQuitting = true;
   if (refreshTimer) clearInterval(refreshTimer);
+  stopBypassSync();
 });
 
 app.on('window-all-closed', () => {
