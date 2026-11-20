@@ -46,6 +46,9 @@ const LOCAL_APP_DATA = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppD
 const MANAGED_ZAPRET_DIR = path.join(LOCAL_APP_DATA, 'ZapretMini', 'zapret');
 const USER_SITES_FILE = path.join(DATA_DIR, 'user-sites.json');
 const UPDATE_STATE_FILE = path.join(DATA_DIR, 'update-state.json');
+const RELEASE_CACHE_FILE = path.join(DATA_DIR, 'release-cache.json');
+updater.setCacheFile(RELEASE_CACHE_FILE);
+zapretUpdater.setCacheFile(RELEASE_CACHE_FILE);
 const HOSTS_FILE = path.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts');
 try {
   const userDataDir = path.join(DATA_DIR, 'electron');
