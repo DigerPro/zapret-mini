@@ -20,6 +20,11 @@
       </svg>
       <span>Zapret Mini</span>
     </div>
+    <div class="activity" id="activity" aria-live="polite" hidden>
+      <span class="activity-spinner" aria-hidden="true"></span>
+      <span class="activity-text" id="activity-text"></span>
+      <span class="activity-pct" id="activity-pct"></span>
+    </div>
     <div class="titlebar-tools">
       <button class="icon-btn" id="btn-settings" aria-label="Настройки" aria-expanded="false" title="Настройки">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -39,6 +44,7 @@
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M.5.5l9 9M9.5.5l-9 9"/></svg>
       </button>
     </div>
+    <div class="top-progress" id="top-progress" hidden><i id="top-progress-fill"></i></div>
   </header>
 
   <!-- ======================= СТАТУС ======================= -->
@@ -167,6 +173,27 @@
     <button class="notice-close" id="notice-close" aria-label="Закрыть сообщение">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9"/></svg>
     </button>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ======================= ПОДТВЕРЖДЕНИЕ ======================= -->
+  <div class="prompt-layer" id="prompt-layer" hidden>
+    <div class="scrim" id="prompt-scrim"></div>
+    <section class="prompt" id="prompt-panel" role="dialog" aria-modal="true" aria-labelledby="prompt-title" aria-describedby="prompt-message" tabindex="-1">
+      <header class="prompt-head">
+        <span class="prompt-icon" id="prompt-icon" aria-hidden="true">i</span>
+        <div class="prompt-heading">
+          <h2 class="prompt-title" id="prompt-title">Zapret Mini</h2>
+          <p class="prompt-message" id="prompt-message"></p>
+        </div>
+        <button class="icon-btn" id="prompt-close" aria-label="Закрыть">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11"/></svg>
+        </button>
+      </header>
+      <div class="prompt-detail" id="prompt-detail" hidden></div>
+      <footer class="prompt-foot" id="prompt-buttons"></footer>
+    </section>
   </div>
 
   <!-- ======================= НАСТРОЙКИ ======================= -->

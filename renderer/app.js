@@ -106,6 +106,21 @@
     notice: $('#notice'),
     noticeText: $('#notice-text'),
     noticeClose: $('#notice-close'),
+    activity: $('#activity'),
+    activityText: $('#activity-text'),
+    activityPct: $('#activity-pct'),
+    topProgress: $('#top-progress'),
+    topProgressFill: $('#top-progress-fill'),
+    toasts: $('#toasts'),
+    promptLayer: $('#prompt-layer'),
+    promptPanel: $('#prompt-panel'),
+    promptIcon: $('#prompt-icon'),
+    promptTitle: $('#prompt-title'),
+    promptMessage: $('#prompt-message'),
+    promptDetail: $('#prompt-detail'),
+    promptButtons: $('#prompt-buttons'),
+    promptClose: $('#prompt-close'),
+    promptScrim: $('#prompt-scrim'),
     winMin: $('#win-min'),
     winMax: $('#win-max'),
     winClose: $('#win-close'),
@@ -140,6 +155,9 @@
     probeDnsTimer: null,
     probeDnsToken: 0,
     noticeTimer: null,
+    download: { active: false, label: '', percent: null },
+    prompt: null,
+    promptReturnFocus: null,
     maxed: false,
     rowNames: []
   };
@@ -809,7 +827,9 @@
   function updateControls() {
     const st = state.data;
     if (!st) return;
-    const busy = Boolean(st.operation) || Boolean(st.testing) || Boolean(st.probe && st.probe.active);
+    const downloading = Boolean(state.download && state.download.active);
+    const busy = Boolean(st.operation) || Boolean(st.testing) || Boolean(st.probe && st.probe.active) ||
+      downloading;
     els.btnCheck.disabled = busy || !st.zapretFound;
     els.btnApply.disabled = busy || !state.viewed;
     els.btnTestAll.disabled = !st.bats.length || busy;
@@ -825,7 +845,7 @@
       els.btnPower.disabled = false;
     } else {
       els.btnPower.textContent = st.winwsRunning ? 'Отключить' : 'Включить';
-      els.btnPower.disabled = Boolean(st.operation);
+      els.btnPower.disabled = Boolean(st.operation) || downloading;
     }
   }
 
@@ -836,6 +856,7 @@
     renderMainSub();
     renderBottom();
     renderSettings();
+    renderActivity();
     updateControls();
   }
 
@@ -844,6 +865,7 @@
     const first = !state.data;
     const testingStarted = Boolean(st.testing) && !state.lastTesting;
     state.data = st;
+    if (st.download) state.download = st.download;
     state.results = new Map();
     for (const result of st.results || []) {
       if (result && result.bat) state.results.set(result.bat.toLowerCase(), result);
@@ -900,6 +922,162 @@
     els.notice.hidden = false;
     if (state.noticeTimer) clearTimeout(state.noticeTimer);
     state.noticeTimer = setTimeout(() => { els.notice.hidden = true; }, 9000);
+  }
+
+  function activityInfo(st) {
+    if (state.download && state.download.active) {
+      return { text: state.download.label || 'Загрузка…', percent: state.download.percent };
+    }
+    if (st.operation) return { text: st.busyText || 'Выполняется…', percent: null };
+    if (st.updateBusy) return { text: st.updateLabel || 'Проверяю обновления…', percent: null };
+    if (st.probe && st.probe.active) return { text: 'Ищу обход…', percent: null };
+    if (st.testing) return { text: 'Тестирую стратегии…', percent: null };
+    return null;
+  }
+
+  function renderActivity() {
+    const st = state.data;
+    const info = st ? activityInfo(st) : null;
+    if (!els.activity || !els.topProgress) return;
+    els.activity.hidden = !info;
+    els.topProgress.hidden = !info;
+    if (!info) {
+      els.topProgress.classList.remove('indeterminate');
+      els.topProgressFill.style.width = '0%';
+      return;
+    }
+    els.activityText.textContent = info.text;
+    const percent = Number.isFinite(info.percent) ? info.percent : null;
+    els.activityPct.textContent = percent == null ? '' : Math.max(0, Math.min(100, Math.round(percent))) + '%';
+    if (percent == null) {
+      els.topProgress.classList.add('indeterminate');
+      els.topProgressFill.style.width = '';
+    } else {
+      els.topProgress.classList.remove('indeterminate');
+      els.topProgressFill.style.width = Math.max(0, Math.min(100, percent)) + '%';
+    }
+  }
+
+  function toastGlyph(type) {
+    if (type === 'error') return '!';
+    if (type === 'warn' || type === 'warning') return '!';
+    if (type === 'success') return '✓';
+    return 'i';
+  }
+
+  function removeToast(el) {
+    if (!el || el.classList.contains('leaving')) return;
+    el.classList.add('leaving');
+    setTimeout(() => el.remove(), 190);
+  }
+
+  function pushToast(data) {
+    if (!data || !els.toasts) return;
+    const type = data.type === 'warning' ? 'warn' : (data.type || 'info');
+    const el = document.createElement('div');
+    el.className = 'toast ' + type;
+    const icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.textContent = toastGlyph(type);
+    const body = document.createElement('div');
+    body.className = 'toast-body';
+    const title = document.createElement('div');
+    title.className = 'toast-title';
+    title.textContent = data.title || 'Zapret Mini';
+    body.appendChild(title);
+    if (data.message) {
+      const message = document.createElement('div');
+      message.className = 'toast-message';
+      message.textContent = String(data.message);
+      body.appendChild(message);
+    }
+    const close = document.createElement('button');
+    close.className = 'toast-close';
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Закрыть уведомление');
+    close.innerHTML = '<svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9"/></svg>';
+    close.addEventListener('click', () => removeToast(el));
+    el.appendChild(icon);
+    el.appendChild(body);
+    el.appendChild(close);
+    els.toasts.appendChild(el);
+    while (els.toasts.children.length > 3) removeToast(els.toasts.firstElementChild);
+    const timeout = data.timeout === 0 ? 0 : (Number(data.timeout) || (type === 'error' ? 9000 : 6500));
+    let timer = null;
+    if (timeout) timer = setTimeout(() => removeToast(el), timeout);
+    el.addEventListener('mouseenter', () => { if (timer) { clearTimeout(timer); timer = null; } });
+    el.addEventListener('mouseleave', () => { if (timeout && !timer) timer = setTimeout(() => removeToast(el), 2500); });
+  }
+
+  function promptGlyph(type) {
+    if (type === 'error') return '!';
+    if (type === 'warning' || type === 'warn') return '!';
+    if (type === 'question') return '?';
+    if (type === 'success') return '✓';
+    return 'i';
+  }
+
+  function answerPrompt(index) {
+    if (!state.prompt) return;
+    const prompt = state.prompt;
+    state.prompt = null;
+    const target = Number.isInteger(index) ? index : prompt.cancelId;
+    if (api.answerPrompt) api.answerPrompt(prompt.id, target);
+    els.promptLayer.classList.remove('open');
+    setTimeout(() => {
+      if (!state.prompt) els.promptLayer.hidden = true;
+    }, 180);
+    const back = state.promptReturnFocus;
+    state.promptReturnFocus = null;
+    if (back && typeof back.focus === 'function') {
+      try { back.focus(); } catch { /* ignore */ }
+    }
+  }
+
+  function showPrompt(data) {
+    if (!data || !els.promptLayer) return;
+    if (state.prompt) answerPrompt(state.prompt.cancelId);
+    state.prompt = data;
+    state.promptReturnFocus = document.activeElement;
+    if (state.settingsOpen) closeSettings(false);
+    els.promptTitle.textContent = data.title || 'Zapret Mini';
+    els.promptMessage.textContent = data.message || '';
+    els.promptMessage.hidden = !data.message;
+    els.promptDetail.textContent = data.detail || '';
+    els.promptDetail.hidden = !data.detail;
+    const type = data.type || 'info';
+    els.promptIcon.textContent = promptGlyph(type);
+    els.promptIcon.dataset.kind = type;
+    els.promptButtons.textContent = '';
+    const buttons = Array.isArray(data.buttons) && data.buttons.length ? data.buttons : ['OK'];
+    const defaultId = Number.isInteger(data.defaultId) ? data.defaultId : 0;
+    let defaultButton = null;
+    buttons.forEach((label, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn ' + (index === defaultId ? 'btn-primary' : 'btn-ghost');
+      button.textContent = label;
+      button.addEventListener('click', () => answerPrompt(index));
+      els.promptButtons.appendChild(button);
+      if (index === defaultId) defaultButton = button;
+    });
+    els.promptLayer.hidden = false;
+    requestAnimationFrame(() => {
+      els.promptLayer.classList.add('open');
+      if (defaultButton) {
+        try { defaultButton.focus(); } catch { /* ignore */ }
+      } else {
+        try { els.promptPanel.focus(); } catch { /* ignore */ }
+      }
+    });
+  }
+
+  function applyDownloadProgress(payload) {
+    state.download = payload && payload.active
+      ? { active: true, label: payload.label || 'Загрузка…', percent: payload.percent == null ? null : Number(payload.percent) }
+      : { active: false, label: '', percent: null };
+    renderActivity();
+    updateControls();
   }
 
   function setSettingsMessage(message) {
@@ -1758,6 +1936,18 @@
     });
 
     document.addEventListener('keydown', (event) => {
+      if (state.prompt) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          answerPrompt(state.prompt.cancelId);
+          return;
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          answerPrompt(Number.isInteger(state.prompt.defaultId) ? state.prompt.defaultId : 0);
+          return;
+        }
+      }
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       const typing = tag === 'INPUT' || tag === 'TEXTAREA';
       if (event.key === '/' && !typing && !state.settingsOpen && !state.summaryOpen && !state.probeOpen) {
@@ -1800,11 +1990,16 @@
     });
 
     els.noticeClose.addEventListener('click', () => { els.notice.hidden = true; });
+    els.promptClose.addEventListener('click', () => answerPrompt(state.prompt ? state.prompt.cancelId : 0));
+    els.promptScrim.addEventListener('click', () => answerPrompt(state.prompt ? state.prompt.cancelId : 0));
     els.winMin.addEventListener('click', () => api.windowMinimize());
     els.winMax.addEventListener('click', () => api.windowMaximize());
     els.winClose.addEventListener('click', () => api.windowClose());
 
     api.onState(applyState);
+    api.onDownloadProgress(applyDownloadProgress);
+    api.onToast(pushToast);
+    api.onPrompt(showPrompt);
     api.onTestProgress((payload) => {
       if (!payload) return;
       if (payload.done) return;

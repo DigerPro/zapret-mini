@@ -82,6 +82,11 @@ let testing = null;
 let probe = null;
 let userSites = null;
 let updateBusy = false;
+let updateLabel = '';
+let rendererReady = false;
+let downloadProgress = { active: false, label: '', percent: null };
+const pendingPrompts = new Map();
+const pendingToasts = [];
 let cancelRequested = false;
 let busyText = '';
 let lastInfo = { winwsRunning: false, winwsPid: null, serviceState: -1 };
@@ -255,12 +260,110 @@ function saveUpdateState(state) {
   } catch { /* ignore */ }
 }
 
+function sendDownloadProgress(label, received, total) {
+  if (label == null) {
+    downloadProgress = { active: false, label: '', percent: null };
+    if (win && !win.isDestroyed()) {
+      try { win.setProgressBar(-1); } catch { /* ignore */ }
+    }
+  } else {
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((received / total) * 100))) : null;
+    downloadProgress = { active: true, label, percent };
+    if (win && !win.isDestroyed()) {
+      try { win.setProgressBar(percent == null ? 2 : Math.max(0, Math.min(1, received / total))); } catch { /* ignore */ }
+    }
+  }
+  if (win && !win.isDestroyed() && rendererReady) {
+    try { win.webContents.send('downloadProgress', downloadProgress); } catch { /* ignore */ }
+  }
+}
+
+function clearDownloadProgress() {
+  sendDownloadProgress(null);
+}
+
+function showUiToast(options) {
+  const opts = options || {};
+  if (!win || win.isDestroyed()) return;
+  const payload = {
+    type: opts.type || 'info',
+    title: opts.title || 'Zapret Mini',
+    message: opts.message || '',
+    timeout: opts.timeout
+  };
+  if (!rendererReady) {
+    pendingToasts.push(payload);
+    if (pendingToasts.length > 4) pendingToasts.shift();
+    return;
+  }
+  try {
+    win.webContents.send('ui:toast', payload);
+  } catch { /* ignore */ }
+}
+
+function waitForRenderer(timeoutMs) {
+  return new Promise((resolve) => {
+    if (rendererReady) return resolve(true);
+    if (!win || win.isDestroyed()) return resolve(false);
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { win.webContents.removeListener('did-finish-load', onLoad); } catch { /* ignore */ }
+      resolve(ok);
+    };
+    const onLoad = () => finish(true);
+    const timer = setTimeout(() => finish(rendererReady), timeoutMs);
+    win.webContents.once('did-finish-load', onLoad);
+  });
+}
+
+async function showUiPrompt(options) {
+  const opts = options || {};
+  if (!win || win.isDestroyed()) return dialog.showMessageBox(opts);
+  if (!rendererReady) await waitForRenderer(8000);
+  if (!win || win.isDestroyed() || !rendererReady) {
+    return dialog.showMessageBox(win, opts);
+  }
+  showWindow();
+  return new Promise((resolve) => {
+    const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    const buttons = Array.isArray(opts.buttons) && opts.buttons.length ? opts.buttons : ['OK'];
+    const cancelId = Number.isInteger(opts.cancelId) ? opts.cancelId : buttons.length - 1;
+    const defaultId = Number.isInteger(opts.defaultId) ? opts.defaultId : 0;
+    const timer = setTimeout(() => {
+      if (!pendingPrompts.has(id)) return;
+      pendingPrompts.delete(id);
+      resolve({ response: cancelId });
+    }, 120000);
+    pendingPrompts.set(id, { resolve, timer });
+    try {
+      win.webContents.send('ui:prompt', {
+        id,
+        type: opts.type || 'info',
+        title: opts.title || 'Zapret Mini',
+        message: opts.message || '',
+        detail: opts.detail || '',
+        buttons,
+        defaultId,
+        cancelId
+      });
+    } catch {
+      clearTimeout(timer);
+      pendingPrompts.delete(id);
+      resolve({ response: cancelId });
+    }
+  });
+}
+
+
 async function promptUpdate(info) {
   if (!win || win.isDestroyed()) return false;
   showWindow();
   const detail = (info.notes || '').slice(0, 1800);
-  const answer = await dialog.showMessageBox(win, {
-    type: 'info',
+  const answer = await showUiPrompt({
+    type: 'question',
     title: 'Zapret Mini',
     message: 'Доступна версия ' + info.latest,
     detail: (detail ? detail + '\n\n' : '') + 'Текущая версия: ' + info.current,
@@ -281,11 +384,10 @@ async function promptUpdate(info) {
 
 async function downloadAndInstall(info) {
   if (!app.isPackaged) {
-    await dialog.showMessageBox(win, {
+    showUiToast({
       type: 'info',
-      title: 'Zapret Mini',
-      message: 'Обновление доступно только в установленной версии',
-      buttons: ['OK']
+      title: 'Обновление',
+      message: 'Обновление доступно только в установленной версии'
     });
     return;
   }
@@ -293,20 +395,20 @@ async function downloadAndInstall(info) {
   let lastTick = 0;
   try {
     logger.write('Обновление: скачивание ' + info.latest);
-    win.setProgressBar(0);
+    sendDownloadProgress('Скачиваю обновление ' + info.latest + '…', 0, 0);
     if (tray) tray.setToolTip('Zapret Mini — загрузка обновления…');
     const file = await updater.downloadUpdate(info, dir, (received, total) => {
       if (!total) return;
       const now = Date.now();
-      if (now - lastTick < 500) return;
+      if (now - lastTick < 250) return;
       lastTick = now;
-      try { win.setProgressBar(Math.max(0, Math.min(1, received / total))); } catch { /* ignore */ }
+      sendDownloadProgress('Скачиваю обновление ' + info.latest + '…', received, total);
     });
-    win.setProgressBar(-1);
+    clearDownloadProgress();
     if (tray) tray.setToolTip('Zapret Mini');
     logger.write('Обновление: скачано и проверено ' + file.zipPath);
-    const answer = await dialog.showMessageBox(win, {
-      type: 'info',
+    const answer = await showUiPrompt({
+      type: 'question',
       title: 'Zapret Mini',
       message: 'Обновление скачано',
       detail: 'Перезапустить приложение и установить версию ' + info.latest + '?',
@@ -325,10 +427,10 @@ async function downloadAndInstall(info) {
     stopBypassSync();
     setTimeout(() => app.quit(), 500);
   } catch (err) {
-    try { win.setProgressBar(-1); } catch { /* ignore */ }
+    clearDownloadProgress();
     if (tray) tray.setToolTip('Zapret Mini');
     logger.write('Обновление: ' + (err && err.stack ? err.stack : err));
-    await dialog.showMessageBox(win, {
+    await showUiPrompt({
       type: 'error',
       title: 'Zapret Mini',
       message: 'Не удалось скачать обновление',
@@ -343,27 +445,26 @@ async function checkForUpdates(manual) {
   if (!app.isPackaged) {
     if (manual) {
       showWindow();
-      await dialog.showMessageBox(win, {
+      showUiToast({
         type: 'info',
-        title: 'Zapret Mini',
-        message: 'Обновления проверяются в установленной версии',
-        buttons: ['OK']
+        title: 'Обновления',
+        message: 'Обновления проверяются в установленной версии'
       });
     }
     return { ok: true, update: false, dev: true };
   }
   updateBusy = true;
+  updateLabel = 'Проверяю обновления…';
+  await pushState();
   try {
     const info = await updater.checkLatest(app.getVersion());
     if (!info.ok) {
       if (manual) {
         showWindow();
-        await dialog.showMessageBox(win, {
+        showUiToast({
           type: 'error',
-          title: 'Zapret Mini',
-          message: 'Не удалось проверить обновления',
-          detail: info.error || 'Неизвестная ошибка',
-          buttons: ['OK']
+          title: 'Не удалось проверить обновления',
+          message: info.error || 'Неизвестная ошибка'
         });
       }
       return { ok: false, update: false, error: info.error };
@@ -371,33 +472,34 @@ async function checkForUpdates(manual) {
     if (!info.update) {
       if (manual) {
         showWindow();
-        await dialog.showMessageBox(win, {
-          type: 'info',
-          title: 'Zapret Mini',
-          message: 'У тебя последняя версия',
-          detail: 'Установлена ' + app.getVersion(),
-          buttons: ['OK']
+        showUiToast({
+          type: 'success',
+          title: 'Обновлений нет',
+          message: 'Установлена последняя версия ' + app.getVersion()
         });
       }
       return { ok: true, update: false, latest: info.latest };
     }
+    updateBusy = false;
+    updateLabel = '';
+    await pushState();
     await promptUpdate(info);
     return { ok: true, update: true, latest: info.latest };
   } catch (err) {
     logger.write('Обновления: ' + (err && err.stack ? err.stack : err));
     if (manual) {
       showWindow();
-      await dialog.showMessageBox(win, {
+      showUiToast({
         type: 'error',
-        title: 'Zapret Mini',
-        message: 'Не удалось проверить обновления',
-        detail: (err && err.message) || 'Проверь интернет',
-        buttons: ['OK']
+        title: 'Не удалось проверить обновления',
+        message: (err && err.message) || 'Проверь интернет'
       });
     }
     return { ok: false, update: false, error: (err && err.message) || 'Ошибка сети' };
   } finally {
     updateBusy = false;
+    updateLabel = '';
+    await pushState();
   }
 }
 
@@ -405,8 +507,8 @@ async function promptZapretUpdate(info, dir) {
   if (!win || win.isDestroyed()) return false;
   const local = zapretUpdater.localVersion(dir);
   showWindow();
-  const answer = await dialog.showMessageBox(win, {
-    type: 'info',
+  const answer = await showUiPrompt({
+    type: 'question',
     title: 'Zapret Mini',
     message: 'Доступна сборка zapret ' + info.latest,
     detail: 'Установлена ' + (local || 'неизвестная версия') + '.\n\n' +
@@ -443,15 +545,20 @@ async function updateZapret(info, dir) {
   await pushState();
   try {
     fs.mkdirSync(base, { recursive: true });
-    if (win) win.setProgressBar(0);
     if (tray) tray.setToolTip('Zapret Mini — загрузка zapret…');
+    let lastTick = 0;
+    sendDownloadProgress('Скачиваю zapret ' + info.latest + '…', 0, 0);
     await zapretUpdater.downloadZip(info, zipPath, (received, total) => {
-      if (!win || !total) return;
-      try { win.setProgressBar(Math.max(0, Math.min(1, received / total))); } catch { /* ignore */ }
+      if (!total) return;
+      const now = Date.now();
+      if (now - lastTick < 250) return;
+      lastTick = now;
+      sendDownloadProgress('Скачиваю zapret ' + info.latest + '…', received, total);
     });
-    if (win) win.setProgressBar(-1);
+    sendDownloadProgress('Распаковываю zapret…', 0, 0);
     fs.rmSync(extractDir, { recursive: true, force: true });
     await zapretUpdater.extractZip(zipPath, extractDir);
+    sendDownloadProgress('Устанавливаю zapret…', 0, 0);
     const root = zapretUpdater.findRoot(extractDir);
     zapretUpdater.prepareStaging(root, dir, stagingDir);
     if (!fs.existsSync(path.join(stagingDir, 'bin', 'winws.exe'))) {
@@ -483,22 +590,22 @@ async function updateZapret(info, dir) {
     config.set('selectedBat', selected);
     config.save();
     setOperation(null, '');
+    clearDownloadProgress();
     await pushState();
     try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
     try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch { /* ignore */ }
     try { fs.rmSync(zipPath, { force: true }); } catch { /* ignore */ }
     if (tray) tray.setToolTip('Zapret Mini');
     showWindow();
-    await dialog.showMessageBox(win, {
-      type: 'info',
-      title: 'Zapret Mini',
-      message: 'Батники обновлены до ' + info.latest,
-      detail: 'Активная стратегия: ' + selected + '\nРезервная копия: ' + backup,
-      buttons: ['OK']
+    showUiToast({
+      type: 'success',
+      title: 'Zapret обновлён до ' + info.latest,
+      message: 'Активная стратегия: ' + selected + '\nРезервная копия: ' + backup,
+      timeout: 12000
     });
     return true;
   } catch (err) {
-    if (win) win.setProgressBar(-1);
+    clearDownloadProgress();
     if (tray) tray.setToolTip('Zapret Mini');
     logger.write('Обновление zapret: ' + (err && err.stack ? err.stack : err));
     if (moved && backup && fs.existsSync(backup)) {
@@ -513,7 +620,7 @@ async function updateZapret(info, dir) {
     setOperation(null, '');
     await pushState();
     showWindow();
-    await dialog.showMessageBox(win, {
+    await showUiPrompt({
       type: 'error',
       title: 'Zapret Mini',
       message: 'Не удалось обновить zapret',
@@ -531,11 +638,10 @@ async function checkZapretUpdates(manual) {
   if (!app.isPackaged) {
     if (manual) {
       showWindow();
-      await dialog.showMessageBox(win, {
+      showUiToast({
         type: 'info',
-        title: 'Zapret Mini',
-        message: 'Обновление zapret доступно только в установленной версии',
-        buttons: ['OK']
+        title: 'Обновление zapret',
+        message: 'Обновление доступно только в установленной версии'
       });
     }
     return { ok: true, update: false, dev: true };
@@ -544,49 +650,51 @@ async function checkZapretUpdates(manual) {
   if (!dir || !looksLikeZapret(dir)) {
     if (manual) {
       showWindow();
-      await dialog.showMessageBox(win, {
+      showUiToast({
         type: 'error',
-        title: 'Zapret Mini',
-        message: 'Папка zapret не найдена',
-        buttons: ['OK']
+        title: 'Папка zapret не найдена',
+        message: 'Укажи папку с bin\\winws.exe в настройках'
       });
     }
     return { ok: false, error: 'Папка zapret не найдена' };
   }
   updateBusy = true;
+  updateLabel = 'Проверяю обновления zapret…';
+  await pushState();
   try {
     const local = zapretUpdater.localVersion(dir);
     const info = await zapretUpdater.checkBatsLatest();
     if (!zapretUpdater.isNewer(info.latest, local)) {
       if (manual) {
         showWindow();
-        await dialog.showMessageBox(win, {
-          type: 'info',
-          title: 'Zapret Mini',
-          message: 'Батники уже обновлены',
-          detail: 'Установлена сборка ' + (local || 'неизвестной версии'),
-          buttons: ['OK']
+        showUiToast({
+          type: 'success',
+          title: 'Батники уже обновлены',
+          message: 'Установлена сборка ' + (local || 'неизвестной версии')
         });
       }
       return { ok: true, update: false, latest: info.latest, local };
     }
+    updateBusy = false;
+    updateLabel = '';
+    await pushState();
     await promptZapretUpdate(info, dir);
     return { ok: true, update: true, latest: info.latest, local };
   } catch (err) {
     logger.write('Обновление zapret: проверка: ' + (err && err.message ? err.message : err));
     if (manual) {
       showWindow();
-      await dialog.showMessageBox(win, {
+      showUiToast({
         type: 'error',
-        title: 'Zapret Mini',
-        message: 'Не удалось проверить обновление zapret',
-        detail: (err && err.message) || 'Проверь интернет',
-        buttons: ['OK']
+        title: 'Не удалось проверить обновление zapret',
+        message: (err && err.message) || 'Проверь интернет'
       });
     }
     return { ok: false, error: (err && err.message) || 'Ошибка сети' };
   } finally {
     updateBusy = false;
+    updateLabel = '';
+    await pushState();
   }
 }
 
@@ -599,16 +707,23 @@ async function autoCheckZapret() {
   state.lastZapretCheck = Date.now();
   saveUpdateState(state);
   updateBusy = true;
+  updateLabel = 'Проверяю обновления zapret…';
+  await pushState();
   try {
     const local = zapretUpdater.localVersion(dir);
     const info = await zapretUpdater.checkBatsLatest();
     if (zapretUpdater.isNewer(info.latest, local) && info.latest !== state.skippedZapretVersion) {
+      updateBusy = false;
+      updateLabel = '';
+      await pushState();
       await promptZapretUpdate(info, dir);
     }
   } catch (err) {
     logger.write('Обновление zapret (авто): ' + (err && err.message ? err.message : err));
   } finally {
     updateBusy = false;
+    updateLabel = '';
+    await pushState();
   }
 }
 
@@ -659,15 +774,22 @@ async function autoCheckUpdates() {
   saveUpdateState(state);
   let appUpdateStarted = false;
   updateBusy = true;
+  updateLabel = 'Проверяю обновления…';
+  await pushState();
   try {
     const info = await updater.checkLatest(app.getVersion());
     if (info.ok && info.update && info.latest !== state.skippedVersion) {
+      updateBusy = false;
+      updateLabel = '';
+      await pushState();
       appUpdateStarted = await promptUpdate(info);
     }
   } catch (err) {
     logger.write('Обновления (авто): ' + (err && err.message ? err.message : err));
   } finally {
     updateBusy = false;
+    updateLabel = '';
+    await pushState();
   }
   if (!appUpdateStarted) await autoCheckZapret();
 }
@@ -854,6 +976,9 @@ async function buildState() {
     probe: publicProbe(),
     operation,
     busyText,
+    updateBusy: Boolean(updateBusy),
+    updateLabel: updateLabel || '',
+    download: downloadProgress,
     files: filesMeta(targets)
   };
 }
@@ -1083,7 +1208,7 @@ async function installZapret(options) {
   }
   if (opts.confirm) {
     showWindow();
-    const answer = await dialog.showMessageBox(win, {
+    const answer = await showUiPrompt({
       type: 'question',
       title: 'Zapret Mini',
       message: 'Скачать батники zapret?',
@@ -1098,19 +1223,23 @@ async function installZapret(options) {
   }
 
   setOperation('zapret-install', 'Скачиваю батники zapret…');
+  sendDownloadProgress('Скачиваю батники zapret…', 0, 0);
   await pushState();
-  if (win) win.setProgressBar(0);
   const tempBase = path.join(DATA_DIR, 'update', 'zapret-fresh-' + Date.now());
   let installed = null;
   let applied = null;
   try {
     try { await backend.stop(); } catch { /* ignore */ }
     stopWinDivert();
+    let lastTick = 0;
     const prepared = await zapretUpdater.downloadAndPrepareLatest(tempBase, (received, total) => {
-      if (!win || !total) return;
-      try { win.setProgressBar(Math.max(0, Math.min(1, received / total))); } catch { /* ignore */ }
+      if (!total) return;
+      const now = Date.now();
+      if (now - lastTick < 250) return;
+      lastTick = now;
+      sendDownloadProgress('Скачиваю батники zapret…', received, total);
     });
-    if (win) win.setProgressBar(-1);
+    sendDownloadProgress('Устанавливаю батники zapret…', 0, 0);
     installed = zapretUpdater.installFromDirectory(prepared.root, MANAGED_ZAPRET_DIR);
     ensureZapretUserLists(MANAGED_ZAPRET_DIR);
     config.set('zapretDir', MANAGED_ZAPRET_DIR);
@@ -1118,6 +1247,7 @@ async function installZapret(options) {
     config.save();
     applyUserSitesToFresh(MANAGED_ZAPRET_DIR);
     setOperation(null, '');
+    clearDownloadProgress();
     await pushState();
 
     const bat = selectedBat();
@@ -1136,21 +1266,20 @@ async function installZapret(options) {
     if (applied && applied.ok) lines.push('Стратегия: ' + bat.replace(/\.bat$/i, ''));
     if (applied && applied.ok === false) lines.push('', 'Обход не запустился: ' + (applied.error || 'неизвестная ошибка'));
     showWindow();
-    await dialog.showMessageBox(win, {
-      type: applied && applied.ok === false ? 'warning' : 'info',
-      title: 'Zapret Mini',
-      message: applied && applied.ok === false ? 'Батники установлены, но обход не запустился' : 'Батники zapret установлены',
-      detail: lines.join('\n'),
-      buttons: ['OK']
+    showUiToast({
+      type: applied && applied.ok === false ? 'warn' : 'success',
+      title: applied && applied.ok === false ? 'Батники установлены, но обход не запустился' : 'Батники zapret установлены',
+      message: lines.join('\n'),
+      timeout: 12000
     });
     return { ok: true, version, dir: MANAGED_ZAPRET_DIR, applied: applied ? Boolean(applied.ok) : null };
   } catch (err) {
     setOperation(null, '');
+    clearDownloadProgress();
     await pushState();
-    if (win) win.setProgressBar(-1);
     logger.write('Установка zapret: ' + (err && err.stack ? err.stack : err));
     showWindow();
-    const action = await dialog.showMessageBox(win, {
+    const action = await showUiPrompt({
       type: 'error',
       title: 'Zapret Mini',
       message: 'Не удалось скачать батники',
@@ -1166,9 +1295,7 @@ async function installZapret(options) {
     return { ok: false, error: (err && err.message) || 'Неизвестная ошибка' };
   } finally {
     try { fs.rmSync(tempBase, { recursive: true, force: true }); } catch { /* ignore */ }
-    if (win) {
-      try { win.setProgressBar(-1); } catch { /* ignore */ }
-    }
+    clearDownloadProgress();
   }
 }
 
@@ -1178,7 +1305,7 @@ async function offerZapretInstallOnStartup() {
   const dir = config.get('zapretDir') || '';
   if (looksLikeZapret(dir)) return false;
   showWindow();
-  const answer = await dialog.showMessageBox(win, {
+  const answer = await showUiPrompt({
     type: 'question',
     title: 'Zapret Mini',
     message: 'Батники zapret не найдены',
@@ -1914,6 +2041,14 @@ function createWindow() {
   win.webContents.on('dom-ready', () => {
     if (logger) logger.write('dom-ready: ' + win.webContents.getURL());
   });
+  win.webContents.on('did-start-loading', () => { rendererReady = false; });
+  win.webContents.on('did-finish-load', () => {
+    rendererReady = true;
+    const queued = pendingToasts.splice(0);
+    for (const toast of queued) {
+      try { win.webContents.send('ui:toast', toast); } catch { /* ignore */ }
+    }
+  });
   win.webContents.on('console-message', (event) => {
     if (!logger || !event) return;
     if (event.level === 'error' || event.level === 3) {
@@ -1975,15 +2110,12 @@ function createWindow() {
     if (operation || testing) {
       event.preventDefault();
       showWindow();
-      try {
-        dialog.showMessageBox(win, {
-          type: 'info',
-          title: 'Zapret Mini',
-          message: 'Дождитесь завершения операции',
-          detail: 'Идёт применение батника или тест. Нажмите «Отмена» в окне и дождитесь завершения.',
-          buttons: ['OK']
-        });
-      } catch { /* ignore */ }
+      showUiToast({
+        type: 'info',
+        title: 'Дождитесь завершения операции',
+        message: 'Идёт применение батника или тест. Нажми «Отмена» в окне и дождись завершения.',
+        timeout: 9000
+      });
       return;
     }
     isQuitting = true;
@@ -2009,15 +2141,12 @@ function showWindow() {
 function quitApp() {
   if (operation || testing) {
     showWindow();
-    try {
-      dialog.showMessageBox(win, {
-        type: 'info',
-        title: 'Zapret Mini',
-        message: 'Дождитесь завершения операции',
-        detail: 'Идёт применение батника или тест. Нажмите «Отмена» в окне и дождитесь завершения.',
-        buttons: ['OK']
-      });
-    } catch { /* ignore */ }
+    showUiToast({
+      type: 'info',
+      title: 'Дождитесь завершения операции',
+      message: 'Идёт применение батника или тест. Нажми «Отмена» в окне и дождись завершения.',
+      timeout: 9000
+    });
     return;
   }
   isQuitting = true;
@@ -2098,6 +2227,14 @@ function setupIpc() {
   ipcReady = true;
 
   ipcMain.handle('state:get', () => buildState());
+  ipcMain.on('ui:prompt-answer', (event, payload) => {
+    const id = payload && payload.id;
+    const pending = id ? pendingPrompts.get(id) : null;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingPrompts.delete(id);
+    pending.resolve({ response: Number(payload.index) || 0 });
+  });
 
   ipcMain.handle('bat:apply', (event, bat) => safeAction(async () => {
     if (operation) return { ok: false, error: 'Уже выполняется другая операция' };
@@ -2368,6 +2505,45 @@ async function captureShots() {
     await wait(400);
   }
 
+  if (all || want === 'ui') {
+    if (testing) {
+      testing = null;
+      await pushState();
+      await wait(250);
+    }
+    sendDownloadProgress('Скачиваю обновление 0.9.20…', 42, 100);
+    await wait(450);
+    await capture('ui-activity');
+    clearDownloadProgress();
+    await wait(150);
+    showUiToast({
+      type: 'success',
+      title: 'Обновление установлено',
+      message: 'Zapret Mini 0.9.20 готов к работе. Обход перезапущен.',
+      timeout: 0
+    });
+    await wait(350);
+    await capture('ui-toast');
+    await win.webContents.executeJavaScript(
+      '(function () { const b = document.querySelector("#toasts .toast-close"); if (b) b.click(); return true; })()', true);
+    await wait(250);
+    const promptDone = showUiPrompt({
+      type: 'question',
+      title: 'Zapret Mini',
+      message: 'Доступна версия 0.9.20',
+      detail: '• Улучшен индикатор обновления\n• Прогресс скачивания в шапке\n• Уведомления в стиле приложения',
+      buttons: ['Установить', 'Позже'],
+      defaultId: 0,
+      cancelId: 1
+    });
+    await wait(400);
+    await capture('ui-prompt');
+    await win.webContents.executeJavaScript(
+      '(function () { const b = document.querySelector("#prompt-buttons .btn-primary"); if (b) b.click(); return true; })()', true);
+    await promptDone.catch(() => null);
+    await wait(250);
+  }
+
   if (all || want === 'probe') {
     if (testing) {
       testing = null;
@@ -2426,7 +2602,7 @@ function maybeServiceNotice() {
     if (START_HIDDEN && tray) {
       tray.displayBalloon({ title: 'Zapret Mini', content: message, iconType: 'info' });
     } else if (win && !win.isDestroyed()) {
-      dialog.showMessageBox(win, { type: 'info', title: 'Zapret Mini', message, buttons: ['OK'] });
+      showUiToast({ type: 'info', title: 'Zapret Mini', message, timeout: 15000 });
     }
   } catch { /* ignore */ }
 }
